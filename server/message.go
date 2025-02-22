@@ -40,32 +40,33 @@ func ParseDomainName(question []byte) (string, error) {
 // www.facebook.com
 
 // BuildResponse constructs a binary DNS response
-func BuildResponse(txnID uint16, domain string, ip string) ([]byte, error) {
+func BuildResponse(txnID uint16, domain, ip string, flags uint16, ttl uint32) ([]byte, error) {
 	buf := new(bytes.Buffer)
 
-	// Write Header
+	// Header Section (12 bytes)
 	header := make([]byte, 12)
-	binary.BigEndian.PutUint16(header[0:2], txnID)  // Transaction ID
-	binary.BigEndian.PutUint16(header[2:4], 0x8180) // Flags (standard response, no error)
-	binary.BigEndian.PutUint16(header[4:6], 1)      // Question Count
-	binary.BigEndian.PutUint16(header[6:8], 1)      // Answer Count
-	binary.BigEndian.PutUint16(header[8:10], 0)     // Authority Count
-	binary.BigEndian.PutUint16(header[10:12], 0)    // Additional Count
+	binary.BigEndian.PutUint16(header[0:2], txnID) // Transaction ID
+	binary.BigEndian.PutUint16(header[2:4], flags) // Flags
+	binary.BigEndian.PutUint16(header[4:6], 1)     // QDCOUNT = 1
+	binary.BigEndian.PutUint16(header[6:8], 1)     // ANCOUNT = 1
 	buf.Write(header)
 
-	// Write Question Section
+	// Question Section
 	if err := WriteDomainName(buf, domain); err != nil {
 		return nil, err
 	}
-	buf.Write([]byte{0, 1, 0, 1}) // Type A, Class IN
+	binary.Write(buf, binary.BigEndian, uint16(1)) // QTYPE (A record)
+	binary.Write(buf, binary.BigEndian, uint16(1)) // QCLASS (IN)
 
-	// Write Answer Section
+	// Answer Section
 	if err := WriteDomainName(buf, domain); err != nil {
 		return nil, err
 	}
-	buf.Write([]byte{0, 1, 0, 1})  // Type A, Class IN
-	buf.Write([]byte{0, 0, 1, 44}) // TTL (300 seconds)
-	buf.Write([]byte{0, 4})        // Data length (4 bytes for IPv4)
+	binary.Write(buf, binary.BigEndian, uint16(1)) // TYPE (A record)
+	binary.Write(buf, binary.BigEndian, uint16(1)) // CLASS (IN)
+	binary.Write(buf, binary.BigEndian, ttl)       // TTL
+	binary.Write(buf, binary.BigEndian, uint16(4)) // RDLENGTH (4 bytes for IPv4)
+
 	ipBytes := net.ParseIP(ip).To4()
 	if ipBytes == nil {
 		return nil, errors.New("invalid IPv4 address")
