@@ -9,6 +9,86 @@ import (
 	"strings"
 )
 
+// DNSResponseBuilder constructs DNS responses through composition
+type DNSResponseBuilder struct {
+	buf      *bytes.Buffer
+	header   []byte
+	question []byte
+	answer   []byte
+}
+
+// NewDNSResponseBuilder creates a new response builder
+func NewDNSResponseBuilder(txnID uint16, flags uint16) *DNSResponseBuilder {
+	b := &DNSResponseBuilder{
+		buf:    new(bytes.Buffer),
+		header: make([]byte, 12),
+	}
+
+	// Initialize header
+	binary.BigEndian.PutUint16(b.header[0:2], txnID)
+	binary.BigEndian.PutUint16(b.header[2:4], flags)
+	binary.BigEndian.PutUint16(b.header[4:6], 1) // QDCOUNT
+	binary.BigEndian.PutUint16(b.header[6:8], 1) // ANCOUNT
+
+	return b
+}
+
+// WithQuestion adds the question section
+func (b *DNSResponseBuilder) WithQuestion(domain string) error {
+	var qBuf bytes.Buffer
+	if err := WriteDomainName(&qBuf, domain); err != nil {
+		return err
+	}
+	qBuf.Write([]byte{0x00, 0x01, 0x00, 0x01}) // QTYPE and QCLASS
+	b.question = qBuf.Bytes()
+	return nil
+}
+
+// WithAnswer adds the answer section
+func (b *DNSResponseBuilder) WithAnswer(domain, ip string, ttl uint32) error {
+	var aBuf bytes.Buffer
+	if err := WriteDomainName(&aBuf, domain); err != nil {
+		return err
+	}
+
+	ipBytes := net.ParseIP(ip).To4()
+	if ipBytes == nil {
+		return errors.New("invalid IPv4 address")
+	}
+
+	binary.Write(&aBuf, binary.BigEndian, uint16(1)) // TYPE
+	binary.Write(&aBuf, binary.BigEndian, uint16(1)) // CLASS
+	binary.Write(&aBuf, binary.BigEndian, ttl)       // TTL
+	binary.Write(&aBuf, binary.BigEndian, uint16(4)) // RDLENGTH
+	aBuf.Write(ipBytes)                              // RDATA
+
+	b.answer = aBuf.Bytes()
+	return nil
+}
+
+// Build constructs the final DNS response
+func (b *DNSResponseBuilder) Build() []byte {
+	b.buf.Write(b.header)
+	b.buf.Write(b.question)
+	b.buf.Write(b.answer)
+	return b.buf.Bytes()
+}
+
+// BuildResponse (simplified interface)
+func BuildResponse(txnID uint16, domain, ip string, flags uint16, ttl uint32) ([]byte, error) {
+	builder := NewDNSResponseBuilder(txnID, flags)
+
+	if err := builder.WithQuestion(domain); err != nil {
+		return nil, err
+	}
+
+	if err := builder.WithAnswer(domain, ip, ttl); err != nil {
+		return nil, err
+	}
+
+	return builder.Build(), nil
+}
+
 // ParseDomainName parses the domain name from a DNS query message
 func ParseDomainName(question []byte) (string, error) {
 	var domainParts []string
@@ -35,46 +115,8 @@ func ParseDomainName(question []byte) (string, error) {
 
 	return strings.Join(domainParts, "."), nil
 }
-
 // [8, 102, 97, 99, 101, 98, 111, 111, 107, 3, 99, 111, 109, 0]
 // www.facebook.com
-
-// BuildResponse constructs a binary DNS response
-func BuildResponse(txnID uint16, domain, ip string, flags uint16, ttl uint32) ([]byte, error) {
-	buf := new(bytes.Buffer)
-
-	// Header Section (12 bytes)
-	header := make([]byte, 12)
-	binary.BigEndian.PutUint16(header[0:2], txnID) // Transaction ID
-	binary.BigEndian.PutUint16(header[2:4], flags) // Flags
-	binary.BigEndian.PutUint16(header[4:6], 1)     // QDCOUNT = 1
-	binary.BigEndian.PutUint16(header[6:8], 1)     // ANCOUNT = 1
-	buf.Write(header)
-
-	// Question Section
-	if err := WriteDomainName(buf, domain); err != nil {
-		return nil, err
-	}
-	binary.Write(buf, binary.BigEndian, uint16(1)) // QTYPE (A record)
-	binary.Write(buf, binary.BigEndian, uint16(1)) // QCLASS (IN)
-
-	// Answer Section
-	if err := WriteDomainName(buf, domain); err != nil {
-		return nil, err
-	}
-	binary.Write(buf, binary.BigEndian, uint16(1)) // TYPE (A record)
-	binary.Write(buf, binary.BigEndian, uint16(1)) // CLASS (IN)
-	binary.Write(buf, binary.BigEndian, ttl)       // TTL
-	binary.Write(buf, binary.BigEndian, uint16(4)) // RDLENGTH (4 bytes for IPv4)
-
-	ipBytes := net.ParseIP(ip).To4()
-	if ipBytes == nil {
-		return nil, errors.New("invalid IPv4 address")
-	}
-	buf.Write(ipBytes)
-
-	return buf.Bytes(), nil
-}
 
 // WriteDomainName encodes a domain name into the DNS message format
 func WriteDomainName(buf *bytes.Buffer, domain string) error {
