@@ -116,7 +116,9 @@ func ParseDomainName(question []byte) (string, error) {
 	return strings.Join(domainParts, "."), nil
 }
 // [8, 102, 97, 99, 101, 98, 111, 111, 107, 3, 99, 111, 109, 0]
-// www.facebook.com
+// Domain encoding: facebook.com → 8facebook3com0
+// Breakdown:
+// 08 (length) + "facebook" + 03 (length) + "com" + 00 (terminator)
 
 // WriteDomainName encodes a domain name into the DNS message format
 func WriteDomainName(buf *bytes.Buffer, domain string) error {
