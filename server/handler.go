@@ -49,6 +49,9 @@ func (h *RateLimitedHandler) HandleQuery(ctx context.Context, domain string) (st
 		return "", errors.New("client IP missing")
 	}
 
+	// Add debug logging
+	log.Printf("[RATE DEBUG] Checking rate limit for %s", ip)
+	
 	if !h.limiter.AllowQuery(ip) {
 		h.mu.Lock()
 		log.Printf("[RATE LIMIT] Blocked request from %s for %s", ip, domain)

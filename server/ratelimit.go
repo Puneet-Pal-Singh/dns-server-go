@@ -42,7 +42,7 @@ func (rl *TokenBucketRateLimiter) AllowQuery(ip string) bool {
 
 	// Initialize if first request
 	if _, exists := rl.tb.buckets[ip]; !exists {
-		rl.tb.buckets[ip] = rl.tb.capacity
+		rl.tb.buckets[ip] = rl.tb.capacity - 1
 		rl.tb.lastRefilled[ip] = now
 		return true
 	}
@@ -53,18 +53,17 @@ func (rl *TokenBucketRateLimiter) AllowQuery(ip string) bool {
 
 	// Add tokens if refill period passed
 	if refills > 0 {
-		//min of the current tokens plus refills and the capacity.
+		rl.tb.lastRefilled[ip] = rl.tb.lastRefilled[ip].Add(time.Duration(refills) * rl.tb.refillRate)
 		rl.tb.buckets[ip] = min(rl.tb.capacity, rl.tb.buckets[ip]+refills)
-		rl.tb.lastRefilled[ip] = now
 	}
 
-	// Check available tokens
-	if rl.tb.buckets[ip] > 0 {
-		rl.tb.buckets[ip]--
-		return true
+	// Check available tokens FIRST before consuming
+	if rl.tb.buckets[ip] <= 0 {
+		return false
 	}
 
-	return false
+	rl.tb.buckets[ip]--
+	return true
 }
 
 func (rl *TokenBucketRateLimiter) Cleanup(interval time.Duration) {
@@ -82,3 +81,27 @@ func (rl *TokenBucketRateLimiter) Cleanup(interval time.Duration) {
 		}
 	}()
 }
+
+// Modified cleanup function with observability hooks
+// func (rl *TokenBucketRateLimiter) Cleanup(interval time.Duration, onCleanup func(ips []string)) {
+//     go func() {
+//         ticker := time.NewTicker(interval)
+//         for range ticker.C {
+//             var cleanedIPs []string
+            
+//             rl.tb.mu.Lock()
+//             for ip := range rl.tb.buckets {
+//                 if time.Since(rl.tb.lastRefilled[ip]) > 24*time.Hour {
+//                     cleanedIPs = append(cleanedIPs, ip)
+//                     delete(rl.tb.buckets, ip)
+//                     delete(rl.tb.lastRefilled, ip)
+//                 }
+//             }
+//             rl.tb.mu.Unlock()
+            
+//             if onCleanup != nil && len(cleanedIPs) > 0 {
+//                 onCleanup(cleanedIPs)
+//             }
+//         }
+//     }()
+// }
