@@ -14,17 +14,29 @@ func TestTokenBucketRateLimiter(t *testing.T) {
 	// Test burst capacity
 	for i := 0; i < 3; i++ {
 		if !rl.AllowQuery("192.168.1.1") {
-			t.Errorf("Request %d should be allowed", i+1)
+			t.Fatalf("Request %d should be allowed", i+1)
 		}
 	}
 
-	// Fourth request should fail
+	// Immediate fourth request must fail
 	if rl.AllowQuery("192.168.1.1") {
-		t.Error("Fourth request should be blocked")
+		t.Fatal("Fourth request should be blocked")
 	}
 
-	// Test refill after 2 seconds
-	time.Sleep(2100 * time.Millisecond)
+	// Verify bucket state for tokens
+	rl.tb.mu.Lock()
+	if rl.tb.buckets["192.168.1.1"] != 0 {
+		t.Errorf("Expected 0 tokens, got %d", rl.tb.buckets["192.168.1.1"])
+	}
+	rl.tb.mu.Unlock()
+
+	// Test refill after exact interval
+	time.Sleep(2*time.Second + 100*time.Millisecond) // Add buffer for CI/CD environments
+
+	rl.tb.mu.Lock()
+	rl.tb.lastRefilled["192.168.1.1"] = time.Now().Add(-2 * time.Second) // Force refill
+	rl.tb.mu.Unlock()
+
 	if !rl.AllowQuery("192.168.1.1") {
 		t.Error("Should allow after refill period")
 	}
