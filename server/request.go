@@ -9,6 +9,10 @@ import (
 	"net"
 )
 
+type contextKey string
+
+const clientIPKey = contextKey("client_ip")
+
 const (
 	responseSuccess       = 0x8180
 	responseServerFailure = 0x8182
@@ -16,7 +20,7 @@ const (
 
 // HandleDNSRequest orchestrates the DNS request handling process
 func HandleDNSRequest(conn *net.UDPConn, clientAddr *net.UDPAddr, request []byte, handler DNSHandler) {
-	ctx := context.WithValue(context.Background(), "client_ip", clientAddr.IP.String())
+	ctx := context.WithValue(context.Background(), clientIPKey, clientAddr.IP.String())
 
 	txnID, domain, err := parseRequest(request)
 	if err != nil {

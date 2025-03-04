@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"net"
 	"sync"
 	"time"
-	"log"
 )
 
 type DNSHandler interface {
@@ -51,7 +51,7 @@ func (h *RateLimitedHandler) HandleQuery(ctx context.Context, domain string) (st
 
 	// Add debug logging
 	log.Printf("[RATE DEBUG] Checking rate limit for %s", ip)
-	
+
 	if !h.limiter.AllowQuery(ip) {
 		h.mu.Lock()
 		log.Printf("[RATE LIMIT] Blocked request from %s for %s", ip, domain)
@@ -64,7 +64,7 @@ func (h *RateLimitedHandler) HandleQuery(ctx context.Context, domain string) (st
 
 // Add missing context helper function
 func GetClientIPFromContext(ctx context.Context) (string, bool) {
-	if ip, ok := ctx.Value("client_ip").(string); ok {
+	if ip, ok := ctx.Value(clientIPKey).(string); ok {
 		return ip, true
 	}
 	if host, _, err := net.SplitHostPort(ctx.Value("peer").(string)); err == nil {
