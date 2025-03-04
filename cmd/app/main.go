@@ -5,6 +5,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
+	"strconv"
 
 	"github.com/Puneet-Pal-Singh/dns-server-go/server"
 )
@@ -19,9 +21,15 @@ func main() {
 	log.Printf("DNS server started on %s", addr)
 
 	resolver := server.NewDNSResolver(upstreamDNS)
-	handler := server.NewDNSHandler(resolver)
+	baseHandler := server.NewDNSHandler(resolver)
 
-	serveDNS(conn, handler)
+	// Initialize rate limiting
+	ratelimiter := createRateLimiter()
+
+	// Wrap handler with rate limiting
+	rateLimitedHandler := server.NewRateLimitedHandler(baseHandler, ratelimiter)
+
+	serveDNS(conn, rateLimitedHandler)
 }
 
 // getUpstreamDNS handles environment configuration
@@ -56,4 +64,23 @@ func serveDNS(conn *net.UDPConn, handler server.DNSHandler) {
 		}
 		go server.HandleDNSRequest(conn, clientAddr, buf[:n], handler)
 	}
+}
+
+func createRateLimiter() server.RateLimiter {
+	capacity := getIntEnv("RATE_LIMIT_CAPACITY", 100)
+	refillSec := getIntEnv("RATE_LIMIT_REFILL", 1)
+
+	return server.NewTokenBucketRateLimiter(
+		capacity,
+		time.Duration(refillSec)*time.Second,
+	)
+}
+
+func getIntEnv(name string, defaultValue int) int {
+	if value := os.Getenv(name); value != "" {
+		if intVal, err := strconv.Atoi(value); err == nil {
+			return intVal
+		}
+	}
+	return defaultValue
 }

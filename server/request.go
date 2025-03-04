@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"log"
@@ -15,6 +16,8 @@ const (
 
 // HandleDNSRequest orchestrates the DNS request handling process
 func HandleDNSRequest(conn *net.UDPConn, clientAddr *net.UDPAddr, request []byte, handler DNSHandler) {
+	ctx := context.WithValue(context.Background(), "client_ip", clientAddr.IP.String())
+
 	txnID, domain, err := parseRequest(request)
 	if err != nil {
 		handleError(conn, clientAddr, txnID, "Request parsing", err)
@@ -23,7 +26,7 @@ func HandleDNSRequest(conn *net.UDPConn, clientAddr *net.UDPAddr, request []byte
 
 	log.Printf("[%d] Received query for: %s", txnID, domain)
 
-	ip, err := resolveDomain(handler, domain)
+	ip, err := resolveDomain(ctx, handler, domain)
 	if err != nil {
 		handleError(conn, clientAddr, txnID, "Domain resolution", err)
 		return
@@ -48,8 +51,8 @@ func parseRequest(request []byte) (uint16, string, error) {
 }
 
 // resolveDomain delegates to the DNS handler
-func resolveDomain(handler DNSHandler, domain string) (string, error) {
-	return handler.HandleQuery(domain)
+func resolveDomain(ctx context.Context, handler DNSHandler, domain string) (string, error) {
+	return handler.HandleQuery(ctx, domain)
 }
 
 // buildAndSendResponse constructs and sends the DNS response
