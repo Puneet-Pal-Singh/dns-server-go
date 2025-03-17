@@ -7,6 +7,8 @@ import (
 	"errors"
 	"log"
 	"net"
+
+	"github.com/Puneet-Pal-Singh/dns-server-go/server/records"
 )
 
 type contextKey string
@@ -22,7 +24,7 @@ const (
 func HandleDNSRequest(conn *net.UDPConn, clientAddr *net.UDPAddr, request []byte, handler DNSHandler) {
 	ctx := context.WithValue(context.Background(), clientIPKey, clientAddr.IP.String())
 
-	txnID, domain, err := parseRequest(request)
+	txnID, domain, qtype, err := parseRequest(request)
 	if err != nil {
 		handleError(conn, clientAddr, txnID, "Request parsing", err)
 		return
@@ -30,38 +32,53 @@ func HandleDNSRequest(conn *net.UDPConn, clientAddr *net.UDPAddr, request []byte
 
 	log.Printf("[%d] Received query for: %s", txnID, domain)
 
-	ip, err := resolveDomain(ctx, handler, domain)
+	recordHandler, data, err := resolveDomain(ctx, handler, domain, qtype)
 	if err != nil {
 		handleError(conn, clientAddr, txnID, "Domain resolution", err)
 		return
 	}
 
-	log.Printf("[%d] Resolved %s → %s", txnID, domain, ip)
+	log.Printf("[%d] Resolved %s → %s", txnID, domain, data)
 
-	if err := buildAndSendResponse(conn, clientAddr, txnID, domain, ip); err != nil {
+	if err := buildAndSendResponse(conn, clientAddr, txnID, domain, recordHandler, data); err != nil {
 		handleError(conn, clientAddr, txnID, "Response building", err)
 	}
 }
 
-// parseRequest extracts transaction ID and domain from the request
-func parseRequest(request []byte) (uint16, string, error) {
+// parseRequest extracts transaction ID, domain, and query type from the request
+func parseRequest(request []byte) (uint16, string, uint16, error) {
 	if len(request) < 12 {
-		return 0, "", errors.New("request too short")
+		return 0, "", 0, errors.New("request too short")
 	}
 
 	txnID := binary.BigEndian.Uint16(request[0:2])
-	domain, err := ParseDomainName(request[12:])
-	return txnID, domain, err
+	qtype := binary.BigEndian.Uint16(request[12:14])
+	domain, err := ParseDomainName(request[14:])
+	return txnID, domain, qtype, err
 }
 
 // resolveDomain delegates to the DNS handler
-func resolveDomain(ctx context.Context, handler DNSHandler, domain string) (string, error) {
-	return handler.HandleQuery(ctx, domain)
+func resolveDomain(ctx context.Context, handler DNSHandler, domain string, qtype uint16) (records.RecordHandler, interface{}, error) {
+	// Get handler for query type
+	recordHandler, ok := records.GetHandler(qtype)
+	if !ok {
+		return nil, nil, errors.New("unsupported query type")
+	}
+
+	data, err := handler.HandleQuery(ctx, domain, qtype)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := handler.ValidateData(data); err != nil {
+		return nil, nil, err
+	}
+
+	return recordHandler, data, nil
 }
 
 // buildAndSendResponse constructs and sends the DNS response
-func buildAndSendResponse(conn *net.UDPConn, addr *net.UDPAddr, txnID uint16, domain, ip string) error {
-	response, err := BuildResponse(txnID, domain, ip, responseSuccess, 300)
+func buildAndSendResponse(conn *net.UDPConn, addr *net.UDPAddr, txnID uint16, domain string, handler records.RecordHandler, data interface{}) error {
+	response, err := BuildResponse(txnID, domain, handler, data, responseSuccess, handler.DefaultTTL())
 	if err != nil {
 		return err
 	}

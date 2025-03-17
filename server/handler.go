@@ -10,7 +10,7 @@ import (
 )
 
 type DNSHandler interface {
-	HandleQuery(ctx context.Context, domain string) (string, error)
+	HandleQuery(ctx context.Context, domain string, qtype uint16) (interface{}, error)
 }
 
 type dnsHandler struct {
@@ -29,8 +29,8 @@ func NewDNSHandler(resolver *DNSResolver) DNSHandler {
 	return &dnsHandler{resolver: resolver}
 }
 
-func (h *dnsHandler) HandleQuery(ctx context.Context, domain string) (string, error) {
-	return h.resolver.ResolveDomain(domain)
+func (h *dnsHandler) HandleQuery(ctx context.Context, domain string, qtype uint16) (interface{}, error) {
+	return h.resolver.ResolveDomain(domain, qtype)
 }
 
 func NewRateLimitedHandler(handler DNSHandler, limiter RateLimiter) DNSHandler {
@@ -41,12 +41,12 @@ func NewRateLimitedHandler(handler DNSHandler, limiter RateLimiter) DNSHandler {
 	}
 }
 
-func (h *RateLimitedHandler) HandleQuery(ctx context.Context, domain string) (string, error) {
+func (h *RateLimitedHandler) HandleQuery(ctx context.Context, domain string, qtype uint16) (interface{}, error) {
 	ip, ok := GetClientIPFromContext(ctx)
 
 	if !ok {
 		log.Printf("[WARNING] Missing client IP in context for domain: %s", domain)
-		return "", errors.New("client IP missing")
+		return nil, errors.New("client IP missing")
 	}
 
 	// Add debug logging
@@ -56,10 +56,10 @@ func (h *RateLimitedHandler) HandleQuery(ctx context.Context, domain string) (st
 		h.mu.Lock()
 		log.Printf("[RATE LIMIT] Blocked request from %s for %s", ip, domain)
 		h.mu.Unlock()
-		return "", errors.New("rate limit exceeded")
+		return nil, errors.New("rate limit exceeded")
 	}
 
-	return h.handler.HandleQuery(ctx, domain)
+	return h.handler.HandleQuery(ctx, domain, qtype)
 }
 
 // Add missing context helper function

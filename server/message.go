@@ -5,8 +5,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"net"
 	"strings"
+
+	"github.com/Puneet-Pal-Singh/dns-server-go/server/records"
 )
 
 // DNSResponseBuilder constructs DNS responses through composition
@@ -45,24 +46,12 @@ func (b *DNSResponseBuilder) WithQuestion(domain string) error {
 }
 
 // WithAnswer adds the answer section
-func (b *DNSResponseBuilder) WithAnswer(domain, ip string, ttl uint32) error {
-	var aBuf bytes.Buffer
-	if err := WriteDomainName(&aBuf, domain); err != nil {
+func (b *DNSResponseBuilder) WithAnswer(domain string, handler records.RecordHandler, data interface{}, ttl uint32) error {
+	answerBuf, err := handler.BuildAnswer(domain, data, ttl)
+	if err != nil {
 		return err
 	}
-
-	ipBytes := net.ParseIP(ip).To4()
-	if ipBytes == nil {
-		return errors.New("invalid IPv4 address")
-	}
-
-	binary.Write(&aBuf, binary.BigEndian, uint16(1)) // TYPE
-	binary.Write(&aBuf, binary.BigEndian, uint16(1)) // CLASS
-	binary.Write(&aBuf, binary.BigEndian, ttl)       // TTL
-	binary.Write(&aBuf, binary.BigEndian, uint16(4)) // RDLENGTH
-	aBuf.Write(ipBytes)                              // RDATA
-
-	b.answer = aBuf.Bytes()
+	b.answer = answerBuf.Bytes()
 	return nil
 }
 
@@ -75,14 +64,14 @@ func (b *DNSResponseBuilder) Build() []byte {
 }
 
 // BuildResponse (simplified interface)
-func BuildResponse(txnID uint16, domain, ip string, flags uint16, ttl uint32) ([]byte, error) {
+func BuildResponse(txnID uint16, domain string, handler records.RecordHandler, data interface{}, flags uint16, ttl uint32) ([]byte, error) {
 	builder := NewDNSResponseBuilder(txnID, flags)
 
 	if err := builder.WithQuestion(domain); err != nil {
 		return nil, err
 	}
 
-	if err := builder.WithAnswer(domain, ip, ttl); err != nil {
+	if err := builder.WithAnswer(domain, handler, data, ttl); err != nil {
 		return nil, err
 	}
 
@@ -115,6 +104,7 @@ func ParseDomainName(question []byte) (string, error) {
 
 	return strings.Join(domainParts, "."), nil
 }
+
 // [8, 102, 97, 99, 101, 98, 111, 111, 107, 3, 99, 111, 109, 0]
 // Domain encoding: facebook.com → 8facebook3com0
 // Breakdown:
