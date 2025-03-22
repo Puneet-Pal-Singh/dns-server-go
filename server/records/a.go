@@ -27,5 +27,5 @@ func (r *ARecord) BuildRecordData(data interface{}) ([]byte, error) {
 }
 
 func (r *ARecord) BuildAnswer(domain string, data interface{}, ttl uint32) (*bytes.Buffer, error) {
-	return r.BuildCommonAnswer(r, domain, data, ttl)
+	return r.BaseHandler.BuildAnswer(r, domain, data, ttl)
 }

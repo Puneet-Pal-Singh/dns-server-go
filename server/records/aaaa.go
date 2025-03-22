@@ -23,7 +23,7 @@ func (r *AAAARecord) DefaultTTL() uint32 {
 }
 
 func (r *AAAARecord) ValidateData(data interface{}) error {
-	return r.ValidateIP(data, false)
+	return r.ValidateIP(data, true)
 }
 
 func (r *AAAARecord) BuildRecordData(data interface{}) ([]byte, error) {

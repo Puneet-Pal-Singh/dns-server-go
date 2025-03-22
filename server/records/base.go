@@ -12,6 +12,7 @@ const (
 	TypeA    = 1
 	TypeAAAA = 28
 	TypeTXT  = 16
+	TypeMX   = 15
 )
 
 // Add unified registration
@@ -48,12 +49,12 @@ type BaseHandler struct{}
 
 // WriteDomainName common implementation
 func (b *BaseHandler) WriteDomainName(buf *bytes.Buffer, domain string) error {
-	if strings.HasSuffix(domain, ".") {
-		domain = domain[:len(domain)-1]
-	}
 
 	labels := strings.Split(domain, ".")
 	for _, label := range labels {
+		if len(label) == 0 {
+			return errors.New("empty label in domain name")
+		}
 		if len(label) > 63 {
 			return errors.New("label exceeds 63 characters")
 		}
@@ -105,7 +106,7 @@ func (b *BaseHandler) BuildCommonAnswer(h RecordHandler, domain string, data int
 func (b *BaseHandler) ValidateIP(data interface{}, ipv6 bool) error {
 	ip, ok := data.(string)
 	if !ok {
-		return errors.New("invalid data type")
+		return errors.New("invalid data type, expected string")
 	}
 
 	parsed := net.ParseIP(ip)
@@ -114,17 +115,20 @@ func (b *BaseHandler) ValidateIP(data interface{}, ipv6 bool) error {
 	}
 
 	if ipv6 && parsed.To4() != nil {
-		return errors.New("expected IPv6 address")
+		return errors.New("IPv4 address not allowed in AAAA record, expected IPv6 address")
 	}
 
 	if !ipv6 && parsed.To4() == nil {
-		return errors.New("expected IPv4 address")
+		return errors.New("IPv6 address not allowed in A record, expected IPv4 address")
 	}
 	return nil
 }
 
 // Common validation functions
 func validateDomain(domain string) error {
+	if len(domain) == 0 {
+		return errors.New("empty domain name")
+	}
 	if len(domain) > 255 {
 		return errors.New("domain name exceeds maximum length")
 	}

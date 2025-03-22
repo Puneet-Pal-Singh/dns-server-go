@@ -1,6 +1,7 @@
 package records
 
 import (
+	"bytes"
 	"errors"
 )
 
@@ -29,4 +30,9 @@ func (r *TXTRecord) BuildRecordData(data interface{}) ([]byte, error) {
 		return nil, errors.New("TXT record too long")
 	}
 	return append([]byte{byte(len(txt))}, txt...), nil
+}
+
+// Update BuildAnswer method to match the interface
+func (r *TXTRecord) BuildAnswer(domain string, data interface{}, ttl uint32) (*bytes.Buffer, error) {
+	return r.BaseHandler.BuildAnswer(r, domain, data, ttl)
 }

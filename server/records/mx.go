@@ -39,6 +39,7 @@ func (r *MXRecord) BuildRecordData(data interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func init() {
-	RegisterHandler(&MXRecord{})
+// Update BuildAnswer method to match the interface
+func (r *MXRecord) BuildAnswer(domain string, data interface{}, ttl uint32) (*bytes.Buffer, error) {
+	return r.BaseHandler.BuildAnswer(r, domain, data, ttl)
 }

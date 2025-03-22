@@ -48,13 +48,42 @@ func HandleDNSRequest(conn *net.UDPConn, clientAddr *net.UDPAddr, request []byte
 // parseRequest extracts transaction ID, domain, and query type from the request
 func parseRequest(request []byte) (uint16, string, uint16, error) {
 	if len(request) < 12 {
-		return 0, "", 0, errors.New("request too short")
+		return 0, "", 0, errors.New("request shorter than header size")
 	}
 
 	txnID := binary.BigEndian.Uint16(request[0:2])
-	qtype := binary.BigEndian.Uint16(request[12:14])
-	domain, err := ParseDomainName(request[14:])
-	return txnID, domain, qtype, err
+
+	// Parse QNAME starting at offset 12
+	domain, bytesRead, err := parseDomainNameWithLength(request[12:])
+	if err != nil {
+		return 0, "", 0, err
+	}
+
+	// QTYPE starts after QNAME (domain) + null byte
+	qtypeStart := 12 + bytesRead
+	if len(request) < qtypeStart+4 {
+		return 0, "", 0, errors.New("request too short for qtype/qclass")
+	}
+
+	qtype := binary.BigEndian.Uint16(request[qtypeStart : qtypeStart+2])
+	return txnID, domain, qtype, nil
+}
+
+// Helper function that returns parsed domain and bytes consumed
+func parseDomainNameWithLength(data []byte) (string, int, error) {
+	domain, err := ParseDomainName(data)
+	if err != nil {
+		return "", 0, err
+	}
+
+	// Calculate bytes consumed by the domain name
+	pos := 0
+	for {
+		if pos >= len(data) || data[pos] == 0 {
+			return domain, pos + 1, nil // +1 for null terminator
+		}
+		pos += int(data[pos]) + 1
+	}
 }
 
 // resolveDomain delegates to the DNS handler
@@ -69,7 +98,8 @@ func resolveDomain(ctx context.Context, handler DNSHandler, domain string, qtype
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := handler.ValidateData(data); err != nil {
+
+	if err := recordHandler.ValidateData(data); err != nil {
 		return nil, nil, err
 	}
 
