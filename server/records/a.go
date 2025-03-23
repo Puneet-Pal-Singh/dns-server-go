@@ -10,9 +10,9 @@ type ARecord struct {
 	BaseHandler
 }
 
-func (r *ARecord) Type() uint16       { return 1 }
-func (r *ARecord) Class() uint16      { return 1 }
-func (r *ARecord) DefaultTTL() uint32 { return 300 }
+func (r *ARecord) Type() uint16       { return TypeA }
+func (r *ARecord) Class() uint16      { return ClassIN }
+func (r *ARecord) DefaultTTL() uint32 { return DefaultTTL }
 
 func (r *ARecord) ValidateData(data interface{}) error {
 	return r.ValidateIP(data, false)
@@ -27,5 +27,9 @@ func (r *ARecord) BuildRecordData(data interface{}) ([]byte, error) {
 }
 
 func (r *ARecord) BuildAnswer(domain string, data interface{}, ttl uint32) (*bytes.Buffer, error) {
+	if err := r.ValidateData(data); err != nil {
+		return nil, err
+	}
+
 	return r.BaseHandler.BuildAnswer(r, domain, data, ttl)
 }

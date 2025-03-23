@@ -30,52 +30,79 @@ func TestAAAARecord_BuildAnswer(t *testing.T) {
 		t.Fatalf("BuildAnswer failed: %v", err)
 	}
 
-	// Validation logic similar to A record test...
-	// (Omitted for brevity, should check IPv6-specific details)
+	// Use the helper function to validate the AAAA record structure
+	validateAAAARecord(t, answer, "example.com", "2001:db8::1", 300)
+}
 
-	// Validate answer structure
-	expectedType := uint16(28) // AAAA record type
-	expectedClass := uint16(1)
-	expectedTTL := uint32(300)
-	expectedIP := net.ParseIP("2001:db8::1").To16()
-	expectedDataLen := 16 // IPv6 is 16 bytes
+func TestAAAARecord_Comprehensive(t *testing.T) {
+	tests := []struct {
+		name    string
+		domain  string
+		ip      string
+		ttl     uint32
+		wantErr bool
+	}{
+		{"valid_ipv6", "example.com", "2001:db8::1", 300, false},
+		{"invalid_ipv6", "example.com", "2001:xyz::1", 300, true},
+		{"ipv4_address", "example.com", "192.168.1.1", 300, true},
+		{"empty_ip", "example.com", "", 300, true},
+		{"zero_ttl", "example.com", "2001:db8::1", 0, false},
+	}
 
-	// Read the answer bytes
-	buf := answer.Bytes()
-	reader := bytes.NewReader(buf)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			aaaa := &AAAARecord{}
+			answer, err := aaaa.BuildAnswer(tt.domain, tt.ip, tt.ttl)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("BuildAnswer() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				validateAAAARecord(t, answer, tt.domain, tt.ip, tt.ttl)
+			}
+		})
+	}
+}
+
+func validateAAAARecord(t *testing.T, buf *bytes.Buffer, domain, ip string, ttl uint32) {
+	data := buf.Bytes()
+	if len(data) < 22 { // Minimum size for AAAA record
+		t.Error("Response too short")
+		return
+	}
 
 	// Skip domain name (variable length)
-	_, _ = parseDomainName(reader)
+	_, _ = parseDomainName(bytes.NewReader(data[12:]))
 
 	// Read type, class, TTL, and data length
 	var (
 		qtype, class uint16
-		ttl          uint32
+		readTTL      uint32
 		dataLen      uint16
 	)
-	binary.Read(reader, binary.BigEndian, &qtype)
-	binary.Read(reader, binary.BigEndian, &class)
-	binary.Read(reader, binary.BigEndian, &ttl)
-	binary.Read(reader, binary.BigEndian, &dataLen)
+	binary.Read(bytes.NewReader(data[12:]), binary.BigEndian, &qtype)
+	binary.Read(bytes.NewReader(data[14:]), binary.BigEndian, &class)
+	binary.Read(bytes.NewReader(data[16:]), binary.BigEndian, &readTTL)
+	binary.Read(bytes.NewReader(data[20:]), binary.BigEndian, &dataLen)
 
 	// Validate fields
-	if qtype != expectedType {
-		t.Errorf("Expected type %d, got %d", expectedType, qtype)
+	if qtype != uint16(28) { // AAAA record type
+		t.Errorf("Expected type %d, got %d", 28, qtype)
 	}
-	if class != expectedClass {
-		t.Errorf("Expected class %d, got %d", expectedClass, class)
+	if class != uint16(1) { // IN class
+		t.Errorf("Expected class %d, got %d", 1, class)
 	}
-	if ttl != expectedTTL {
-		t.Errorf("Expected TTL %d, got %d", expectedTTL, ttl)
+	if readTTL != ttl {
+		t.Errorf("Expected TTL %d, got %d", ttl, readTTL)
 	}
-	if dataLen != 16 {
-		t.Errorf("Expected data length %d, got %d", expectedDataLen, dataLen)
+	if dataLen != 16 { // AAAA record data length should be 16 bytes
+		t.Errorf("Expected data length 16, got %d", dataLen)
 	}
 
 	// Validate IP
-	ip := make([]byte, 16)
-	reader.Read(ip)
-	if !bytes.Equal(ip, expectedIP) {
-		t.Errorf("Expected IP %v, got %v", expectedIP, ip)
+	ipData := make([]byte, 16)
+	copy(ipData, data[22:38]) // Assuming the IP starts after the header and fields
+	if !bytes.Equal(ipData, net.ParseIP(ip).To16()) {
+		t.Errorf("Expected IP %v, got %v", ip, ipData)
 	}
 }

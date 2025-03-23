@@ -53,37 +53,21 @@ func parseRequest(request []byte) (uint16, string, uint16, error) {
 
 	txnID := binary.BigEndian.Uint16(request[0:2])
 
-	// Parse QNAME starting at offset 12
-	domain, bytesRead, err := parseDomainNameWithLength(request[12:])
+	// Parse QNAME starting at offset 12 with byte length tracking
+	parser := NewDomainParser()
+	domain, bytesConsumed, err := parser.Parse(request[12:])
 	if err != nil {
 		return 0, "", 0, err
 	}
 
-	// QTYPE starts after QNAME (domain) + null byte
-	qtypeStart := 12 + bytesRead
+	// Calculate QTYPE position using actual bytes consumed
+	qtypeStart := 12 + bytesConsumed
 	if len(request) < qtypeStart+4 {
 		return 0, "", 0, errors.New("request too short for qtype/qclass")
 	}
 
 	qtype := binary.BigEndian.Uint16(request[qtypeStart : qtypeStart+2])
 	return txnID, domain, qtype, nil
-}
-
-// Helper function that returns parsed domain and bytes consumed
-func parseDomainNameWithLength(data []byte) (string, int, error) {
-	domain, err := ParseDomainName(data)
-	if err != nil {
-		return "", 0, err
-	}
-
-	// Calculate bytes consumed by the domain name
-	pos := 0
-	for {
-		if pos >= len(data) || data[pos] == 0 {
-			return domain, pos + 1, nil // +1 for null terminator
-		}
-		pos += int(data[pos]) + 1
-	}
 }
 
 // resolveDomain delegates to the DNS handler

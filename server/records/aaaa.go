@@ -11,15 +11,15 @@ type AAAARecord struct {
 }
 
 func (r *AAAARecord) Type() uint16 {
-	return 28 // AAAA type code
+	return TypeAAAA
 }
 
 func (r *AAAARecord) Class() uint16 {
-	return 1
+	return ClassIN
 }
 
 func (r *AAAARecord) DefaultTTL() uint32 {
-	return 300
+	return DefaultTTL
 }
 
 func (r *AAAARecord) ValidateData(data interface{}) error {
@@ -35,5 +35,11 @@ func (r *AAAARecord) BuildRecordData(data interface{}) ([]byte, error) {
 }
 
 func (r *AAAARecord) BuildAnswer(domain string, data interface{}, ttl uint32) (*bytes.Buffer, error) {
+	// Validate the data first
+	if err := r.ValidateData(data); err != nil {
+		return nil, err
+	}
+
+	// Pass the original data to BaseHandler, not the processed bytes
 	return r.BaseHandler.BuildAnswer(r, domain, data, ttl)
 }
