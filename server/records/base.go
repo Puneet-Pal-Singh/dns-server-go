@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 )
@@ -17,15 +18,46 @@ const (
 	TypeAAAA   = 28  // AAAA record type
 	TypeMX     = 15  // MX record type
 	TypeTXT    = 16  // TXT record type
+	TypeCNAME  = 5   // CNAME record type
 	DefaultTTL = 300 // Default TTL value
 )
 
-// Add unified registration
+// // Add unified registration
+// func init() {
+// 	log.Println("Registering DNS record handlers:")
+// 	registerWithLog(&ARecord{}, "A")
+// 	registerWithLog(&AAAARecord{}, "AAAA")
+// 	registerWithLog(&MXRecord{}, "MX")
+// 	registerWithLog(&TXTRecord{}, "TXT")
+// 	registerWithLog(&CNAMERecord{}, "CNAME")
+// }
+
+// func registerWithLog(h RecordHandler, name string) {
+// 	RegisterHandler(h)
+// 	log.Printf(" - Registered %s handler (type %d)", name, h.Type())
+// }
+
 func init() {
+	// Add debug logging
+	log.Printf("Initializing DNS record handlers...")
+
+	// Register handlers
+	handlers = make(map[uint16]RecordHandler)
 	RegisterHandler(&ARecord{})
 	RegisterHandler(&AAAARecord{})
-	RegisterHandler(&TXTRecord{})
 	RegisterHandler(&MXRecord{})
+	RegisterHandler(&TXTRecord{})
+	RegisterHandler(&CNAMERecord{})
+
+	// Verify registration
+	log.Printf("Registered handlers for types: A(%d), AAAA(%d), MX(%d), TXT(%d), CNAME(%d)",
+		TypeA, TypeAAAA, TypeMX, TypeTXT, TypeCNAME)
+}
+
+// Add verification method
+func IsTypeSupported(qtype uint16) bool {
+	_, ok := handlers[qtype]
+	return ok
 }
 
 var handlers = make(map[uint16]RecordHandler)
@@ -35,6 +67,9 @@ func RegisterHandler(h RecordHandler) {
 }
 
 func GetHandler(qtype uint16) (RecordHandler, bool) {
+	// Debug logging
+	log.Printf("Looking up handler for type %d", qtype)
+	log.Printf("Available handlers: %v", handlers)
 	h, ok := handlers[qtype]
 	return h, ok
 }
@@ -58,6 +93,7 @@ type DomainNameWriter struct {
 // To this
 type BaseHandler struct {
 	Writer *DomainNameWriter
+	Type   uint16
 }
 
 // Add this interface definition
@@ -71,29 +107,76 @@ func (b *BaseHandler) SetWriter(w *DomainNameWriter) {
 }
 
 // WriteDomainName with compression support
+// func (b *BaseHandler) WriteDomainName(buf *bytes.Buffer, domain string) error {
+// 	if len(domain) == 0 {
+// 		return errors.New("empty domain name")
+// 	}
+
+// 	// Remove trailing dot if present
+// 	domain = strings.TrimSuffix(domain, ".")
+
+// 	// Initialize writer if needed
+// 	if b.Writer == nil {
+// 		b.Writer = &DomainNameWriter{
+// 			Offsets: make(map[string]int),
+// 		}
+// 	}
+
+// 	startPos := b.Writer.Pos
+
+// 	// Check if we've seen this domain before
+// 	if offset, exists := b.Writer.Offsets[domain]; exists {
+// 		// Use compression pointer (0xC0 | offset)
+// 		pointer := uint16(0xC000 | offset)
+// 		return binary.Write(buf, binary.BigEndian, pointer)
+// 	}
+
+// 	labels := strings.Split(domain, ".")
+// 	for i, label := range labels {
+// 		if len(label) == 0 {
+// 			return errors.New("empty label in domain name")
+// 		}
+// 		if len(label) > 63 {
+// 			return errors.New("label exceeds 63 characters")
+// 		}
+
+// 		// Store offset for this subdomain
+// 		remainingDomain := strings.Join(labels[i:], ".")
+// 		b.Writer.Offsets[remainingDomain] = b.Writer.Pos
+
+// 		// Write label length and data
+// 		if err := buf.WriteByte(byte(len(label))); err != nil {
+// 			return fmt.Errorf("failed to write label length: %w", err)
+// 		}
+// 		if _, err := buf.Write([]byte(label)); err != nil {
+// 			return fmt.Errorf("failed to write label: %w", err)
+// 		}
+
+// 		b.Writer.Pos += 1 + len(label)
+// 	}
+
+// 	// Write the terminating null byte
+// 	if err := buf.WriteByte(0); err != nil {
+// 		return fmt.Errorf("failed to write terminating byte: %w", err)
+// 	}
+// 	b.Writer.Pos++
+
+// 	// Store the complete domain name offset
+// 	b.Writer.Offsets[domain] = startPos
+
+// 	return nil
+// }
+
 func (b *BaseHandler) WriteDomainName(buf *bytes.Buffer, domain string) error {
-	if len(domain) == 0 {
+	if domain == "" {
 		return errors.New("empty domain name")
 	}
 
-	// Initialize writer if needed
-	if b.Writer == nil {
-		b.Writer = &DomainNameWriter{
-			Offsets: make(map[string]int),
-		}
-	}
-
-	startPos := b.Writer.Pos
-
-	// Check if we've seen this domain before
-	if offset, exists := b.Writer.Offsets[domain]; exists {
-		// Use compression pointer (0xC0 | offset)
-		pointer := uint16(0xC000 | offset)
-		return binary.Write(buf, binary.BigEndian, pointer)
-	}
+	// Remove trailing dot if present
+	domain = strings.TrimSuffix(domain, ".")
 
 	labels := strings.Split(domain, ".")
-	for i, label := range labels {
+	for _, label := range labels {
 		if len(label) == 0 {
 			return errors.New("empty label in domain name")
 		}
@@ -101,30 +184,18 @@ func (b *BaseHandler) WriteDomainName(buf *bytes.Buffer, domain string) error {
 			return errors.New("label exceeds 63 characters")
 		}
 
-		// Store offset for this subdomain
-		remainingDomain := strings.Join(labels[i:], ".")
-		b.Writer.Offsets[remainingDomain] = b.Writer.Pos
-
+		// Write length byte
 		if err := buf.WriteByte(byte(len(label))); err != nil {
-			return fmt.Errorf("failed to write label length: %w", err)
+			return err
 		}
-		if _, err := buf.Write([]byte(label)); err != nil {
-			return fmt.Errorf("failed to write label: %w", err)
+		// Write label
+		if _, err := buf.WriteString(label); err != nil {
+			return err
 		}
-
-		b.Writer.Pos += 1 + len(label)
 	}
 
-	// Write the terminating null byte
-	if err := buf.WriteByte(0); err != nil {
-		return fmt.Errorf("failed to write terminator: %w", err)
-	}
-	b.Writer.Pos++
-
-	// Store the complete domain name offset
-	b.Writer.Offsets[domain] = startPos
-
-	return nil
+	// Write terminating zero byte
+	return buf.WriteByte(0)
 }
 
 // ValidateCommon checks base requirements
@@ -140,20 +211,20 @@ func (b *BaseHandler) ValidateCommon(domain string, data interface{}) error {
 
 // BuildCommonAnswer handles common answer structure
 func (b *BaseHandler) BuildCommonAnswer(h RecordHandler, domain string, data interface{}, ttl uint32) (*bytes.Buffer, error) {
-	buf := new(bytes.Buffer)
+	var buf bytes.Buffer
 
-	// Write domain name using shared implementation
-	if err := b.WriteDomainName(buf, domain); err != nil {
-		return nil, fmt.Errorf("failed to write domain name: %w", err)
+	// Write domain name
+	if err := b.WriteDomainName(&buf, domain); err != nil {
+		return nil, fmt.Errorf("failed to write domain: %w", err)
 	}
 
 	// Write record type
-	if err := binary.Write(buf, binary.BigEndian, h.Type()); err != nil {
+	if err := binary.Write(&buf, binary.BigEndian, h.Type()); err != nil {
 		return nil, fmt.Errorf("failed to write type: %w", err)
 	}
 
 	// Write class
-	if err := binary.Write(buf, binary.BigEndian, h.Class()); err != nil {
+	if err := binary.Write(&buf, binary.BigEndian, h.Class()); err != nil {
 		return nil, fmt.Errorf("failed to write class: %w", err)
 	}
 
@@ -163,7 +234,7 @@ func (b *BaseHandler) BuildCommonAnswer(h RecordHandler, domain string, data int
 	}
 
 	// Write TTL
-	if err := binary.Write(buf, binary.BigEndian, ttl); err != nil {
+	if err := binary.Write(&buf, binary.BigEndian, ttl); err != nil {
 		return nil, fmt.Errorf("failed to write TTL: %w", err)
 	}
 
@@ -174,7 +245,7 @@ func (b *BaseHandler) BuildCommonAnswer(h RecordHandler, domain string, data int
 	}
 
 	// Write record data length
-	if err := binary.Write(buf, binary.BigEndian, uint16(len(recordData))); err != nil {
+	if err := binary.Write(&buf, binary.BigEndian, uint16(len(recordData))); err != nil {
 		return nil, fmt.Errorf("failed to write data length: %w", err)
 	}
 
@@ -183,7 +254,7 @@ func (b *BaseHandler) BuildCommonAnswer(h RecordHandler, domain string, data int
 		return nil, fmt.Errorf("failed to write record data: %w", err)
 	}
 
-	return buf, nil
+	return &buf, nil
 }
 
 // ValidateIP checks IP address validity
@@ -233,17 +304,50 @@ func (b *BaseHandler) BuildAnswer(h RecordHandler, domain string, data interface
 // Add type validation in base handler
 func (b *BaseHandler) ValidateRecordType(data interface{}, expectedType string) error {
 	switch expectedType {
+
 	case "A":
 		return b.ValidateIP(data, false)
 	case "AAAA":
 		return b.ValidateIP(data, true)
-	case "MX":
-		_, ok := data.(MXData)
+	case "CNAME":
+		target, ok := data.(string)
 		if !ok {
-			return errors.New("invalid MX data")
+			return errors.New("invalid CNAME data type")
 		}
-		return nil
+		return validateDomain(target)
+
+	case "MX":
+		mx, ok := data.(MXData)
+		if !ok {
+			return errors.New("invalid MX data type")
+		}
+		return validateDomain(mx.Exchange)
 	default:
-		return errors.New("unsupported record type")
+		return fmt.Errorf("unknown record type: %s", expectedType)
 	}
+}
+
+// Add helper method to check if a type is supported
+func IsSupportedType(qtype uint16) bool {
+	switch qtype {
+	case TypeA, TypeAAAA, TypeMX, TypeTXT, TypeCNAME:
+		return true
+	default:
+		return false
+	}
+}
+
+// Add this helper function
+func readDNSFields(r *bytes.Reader) (qtype uint16, class uint16, ttl uint32, dataLen uint16, err error) {
+	if err = binary.Read(r, binary.BigEndian, &qtype); err != nil {
+		return
+	}
+	if err = binary.Read(r, binary.BigEndian, &class); err != nil {
+		return
+	}
+	if err = binary.Read(r, binary.BigEndian, &ttl); err != nil {
+		return
+	}
+	err = binary.Read(r, binary.BigEndian, &dataLen)
+	return
 }
