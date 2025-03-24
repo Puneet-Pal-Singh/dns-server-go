@@ -2,7 +2,6 @@ package records
 
 import (
 	"bytes"
-	"encoding/binary"
 	"net"
 	"strings"
 	"testing"
@@ -61,11 +60,30 @@ func TestARecord_BuildAnswer(t *testing.T) {
 	validateARecord(t, answer, "example.com", "192.168.1.1", 300)
 }
 
-// Helper to parse domain name (simplified)
+// Update domain name parser to handle compression pointers properly
 func parseDomainName(r *bytes.Reader) (string, error) {
 	var labels []string
+	originalPos, _ := r.Seek(0, 1) // Track original position for compression pointers
+
 	for {
-		length, _ := r.ReadByte()
+		length, err := r.ReadByte()
+		if err != nil {
+			return "", err
+		}
+
+		// Handle compression pointer (two high bits set)
+		if (length & 0xC0) == 0xC0 {
+			nextByte, _ := r.ReadByte()
+			pointer := uint16(length&^0xC0)<<8 | uint16(nextByte)
+
+			// Save current position and jump to pointer
+			currentPos, _ := r.Seek(0, 1)
+			r.Seek(int64(pointer), 0)
+			name, _ := parseDomainName(r) // Recursively parse compressed name
+			r.Seek(currentPos, 0)         // Restore original position
+			return strings.Join(labels, ".") + "." + name, nil
+		}
+
 		if length == 0 {
 			break
 		}
@@ -73,6 +91,9 @@ func parseDomainName(r *bytes.Reader) (string, error) {
 		r.Read(label)
 		labels = append(labels, string(label))
 	}
+
+	// Reset reader position if no compression was used
+	r.Seek(originalPos, 0)
 	return strings.Join(labels, "."), nil
 }
 
@@ -136,43 +157,44 @@ func TestARecord_Comprehensive(t *testing.T) {
 
 func validateARecord(t *testing.T, buf *bytes.Buffer, domain, ip string, ttl uint32) {
 	data := buf.Bytes()
-	if len(data) < 14 { // Minimum size for A record
+	if len(data) < 14 {
 		t.Error("Response too short")
 		return
 	}
 
-	// Skip domain name (variable length)
-	_, _ = parseDomainName(bytes.NewReader(data[12:]))
+	r := bytes.NewReader(data)
+	_, err := parseDomainName(r)
+	if err != nil {
+		t.Fatalf("Failed to parse domain name: %v", err)
+	}
 
-	// Read type, class, TTL, and data length
-	var (
-		qtype, class uint16
-		readTTL      uint32
-		dataLen      uint16
-	)
-	binary.Read(bytes.NewReader(data[12:]), binary.BigEndian, &qtype)
-	binary.Read(bytes.NewReader(data[14:]), binary.BigEndian, &class)
-	binary.Read(bytes.NewReader(data[16:]), binary.BigEndian, &readTTL)
-	binary.Read(bytes.NewReader(data[20:]), binary.BigEndian, &dataLen)
+	// Read DNS fields
+	qtype, class, readTTL, dataLen, err := readDNSFields(r)
+	if err != nil {
+		t.Fatalf("Failed to read DNS fields: %v", err)
+	}
 
 	// Validate fields
-	if qtype != uint16(1) { // A record type
+	if qtype != uint16(1) {
 		t.Errorf("Expected type %d, got %d", 1, qtype)
 	}
-	if class != uint16(1) { // IN class
+	if class != uint16(1) {
 		t.Errorf("Expected class %d, got %d", 1, class)
 	}
 	if readTTL != ttl {
 		t.Errorf("Expected TTL %d, got %d", ttl, readTTL)
 	}
-	if dataLen != 4 { // A record data length should be 4 bytes
+	if dataLen != 4 {
 		t.Errorf("Expected data length 4, got %d", dataLen)
 	}
 
-	// Validate IP
-	ipData := make([]byte, 4)
-	copy(ipData, data[24:28]) // Assuming the IP starts after the header and fields
-	if !bytes.Equal(ipData, net.ParseIP(ip).To4()) {
-		t.Errorf("Expected IP %v, got %v", ip, ipData)
+	// Read IP address
+	ipBytes := make([]byte, 4)
+	if _, err := r.Read(ipBytes); err != nil {
+		t.Fatalf("Failed to read IP: %v", err)
+	}
+	parsedIP := net.IP(ipBytes).String()
+	if parsedIP != ip {
+		t.Errorf("IP mismatch: expected %s, got %s", ip, parsedIP)
 	}
 }

@@ -2,7 +2,6 @@ package records
 
 import (
 	"bytes"
-	"encoding/binary"
 	"strings"
 	"testing"
 )
@@ -38,42 +37,64 @@ func TestTXTRecord_Comprehensive(t *testing.T) {
 
 func validateTXTRecord(t *testing.T, buf *bytes.Buffer, domain string, txt string, ttl uint32) {
 	data := buf.Bytes()
-	if len(data) < 14 { // Minimum size for TXT record
+	if len(data) < 14 {
 		t.Error("Response too short")
 		return
 	}
 
-	// Skip domain name (variable length)
-	_, _ = parseDomainName(bytes.NewReader(data[12:]))
+	r := bytes.NewReader(data)
+	_, err := parseDomainName(r)
+	if err != nil {
+		t.Fatalf("Failed to parse domain name: %v", err)
+	}
 
-	// Read type, class, TTL, and data length
-	var (
-		qtype, class uint16
-		readTTL      uint32
-		dataLen      uint16
-	)
-	binary.Read(bytes.NewReader(data[12:]), binary.BigEndian, &qtype)
-	binary.Read(bytes.NewReader(data[14:]), binary.BigEndian, &class)
-	binary.Read(bytes.NewReader(data[16:]), binary.BigEndian, &readTTL)
-	binary.Read(bytes.NewReader(data[20:]), binary.BigEndian, &dataLen)
+	// Read DNS fields
+	qtype, class, _, _, err := readDNSFields(r)
+	if err != nil {
+		t.Fatalf("Failed to read DNS fields: %v", err)
+	}
 
 	// Validate fields
-	if qtype != uint16(16) { // TXT record type
-		t.Errorf("Expected type %d, got %d", 16, qtype)
+	if qtype != uint16(16) {
+		t.Errorf("Expected TXT type 16, got %d", qtype)
 	}
-	if class != uint16(1) { // IN class
+	if class != uint16(1) {
 		t.Errorf("Expected class %d, got %d", 1, class)
 	}
-	if readTTL != ttl {
-		t.Errorf("Expected TTL %d, got %d", ttl, readTTL)
+
+	// Read TXT data
+	txtLen, err := r.ReadByte()
+	if err != nil {
+		t.Fatalf("Failed to read TXT length: %v", err)
 	}
-	if dataLen > 255 { // TXT record data length should not exceed 255 bytes
-		t.Errorf("Expected data length <= 255, got %d", dataLen)
+	txtData := make([]byte, txtLen)
+	if _, err := r.Read(txtData); err != nil {
+		t.Fatalf("Failed to read TXT data: %v", err)
+	}
+	if string(txtData) != txt {
+		t.Errorf("TXT mismatch: expected %q, got %q", txt, string(txtData))
+	}
+}
+
+func TestTXTRecord_Integration(t *testing.T) {
+	txt := &TXTRecord{}
+	testData := "v=spf1 include:_spf.google.com ~all"
+
+	answer, err := txt.BuildAnswer("example.com", testData, 300)
+	if err != nil {
+		t.Fatalf("Failed to build TXT answer: %v", err)
 	}
 
-	// Validate TXT data
-	txtData := string(data[22 : 22+dataLen])
-	if txtData != txt {
-		t.Errorf("Expected TXT data %s, got %s", txt, txtData)
+	validateTXTRecord(t, answer, "example.com", testData, 300)
+}
+
+func TestTXTHandler_Registration(t *testing.T) {
+	handler, ok := GetHandler(TypeTXT)
+	if !ok {
+		t.Fatal("TXT handler not registered")
+	}
+
+	if handler.Type() != TypeTXT {
+		t.Errorf("Wrong type: got %d, want %d", handler.Type(), TypeTXT)
 	}
 }

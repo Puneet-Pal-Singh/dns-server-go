@@ -28,13 +28,37 @@ func (r *MXRecord) ValidateData(data interface{}) error {
 }
 
 func (r *MXRecord) BuildRecordData(data interface{}) ([]byte, error) {
-	mx := data.(MXData)
-	var buf bytes.Buffer
+	mx, ok := data.(MXData)
+	if !ok {
+		return nil, errors.New("invalid MX data format")
+	}
 
-	binary.Write(&buf, binary.BigEndian, mx.Preference)
-	if err := r.WriteDomainName(&buf, mx.Exchange); err != nil {
+	var buf bytes.Buffer
+	// Write preference (2 bytes)
+	if err := binary.Write(&buf, binary.BigEndian, mx.Preference); err != nil {
 		return nil, err
 	}
+
+	// // Write exchange domain name
+	// exchange := strings.TrimSuffix(mx.Exchange, ".")
+	// labels := strings.Split(exchange, ".")
+	// for _, label := range labels {
+	// 	if err := buf.WriteByte(byte(len(label))); err != nil {
+	// 		return nil, err
+	// 	}
+	// 	if _, err := buf.WriteString(label); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+	// // Terminate with zero byte
+	// if err := buf.WriteByte(0); err != nil {
+	// 	return nil, err
+	// }
+
+	// Write exchange domain
+    if err := r.WriteDomainName(&buf, mx.Exchange); err != nil {
+        return nil, err
+    }
 
 	return buf.Bytes(), nil
 }

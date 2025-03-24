@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 
@@ -72,19 +73,38 @@ func parseRequest(request []byte) (uint16, string, uint16, error) {
 
 // resolveDomain delegates to the DNS handler
 func resolveDomain(ctx context.Context, handler DNSHandler, domain string, qtype uint16) (records.RecordHandler, interface{}, error) {
-	// Get handler for query type
+	// Add debug logging
+	log.Printf("Resolving domain %s with query type %d", domain, qtype)
+
+	// Get handler for query type first
 	recordHandler, ok := records.GetHandler(qtype)
 	if !ok {
-		return nil, nil, errors.New("unsupported query type")
+		log.Printf("No handler found for query type %d", qtype)
+		return nil, nil, fmt.Errorf("unsupported query type: %d", qtype)
 	}
 
+	// Get the data from the DNS handler
 	data, err := handler.HandleQuery(ctx, domain, qtype)
 	if err != nil {
+		log.Printf("HandleQuery error for %s (type %d): %v", domain, qtype, err)
 		return nil, nil, err
 	}
 
+	// Validate the data
 	if err := recordHandler.ValidateData(data); err != nil {
-		return nil, nil, err
+		log.Printf("Data validation error for %s (type %d): %v", domain, qtype, err)
+		return nil, nil, fmt.Errorf("invalid data for type %d: %v", qtype, err)
+	}
+
+	// Improved Debug logging format 
+	switch data := data.(type) {
+	case records.MXData:
+		log.Printf("[%d] Resolved %s → MX {preference: %d, exchange: %s}",
+			qtype, domain, data.Preference, data.Exchange)
+	case []string:
+		log.Printf("[%d] Resolved %s → TXT %q", qtype, domain, data[0])
+	default:
+		log.Printf("[%d] Resolved %s → %v", qtype, domain, data)
 	}
 
 	return recordHandler, data, nil

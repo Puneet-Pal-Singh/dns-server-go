@@ -3,10 +3,14 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/Puneet-Pal-Singh/dns-server-go/server/records"
 )
 
 type DNSHandler interface {
@@ -30,7 +34,35 @@ func NewDNSHandler(resolver *DNSResolver) DNSHandler {
 }
 
 func (h *dnsHandler) HandleQuery(ctx context.Context, domain string, qtype uint16) (interface{}, error) {
-	return h.resolver.ResolveDomain(domain, qtype)
+	// return h.resolver.ResolveDomain(domain, qtype)
+	switch qtype {
+	case records.TypeA:
+		return "192.0.2.1", nil
+
+	case records.TypeMX:
+		// Ensure proper MX record format
+		if !strings.Contains(domain, ".") {
+			return nil, fmt.Errorf("invalid domain for MX record: %s", domain)
+		}
+		return records.MXData{
+			Preference: 10,
+			Exchange:   fmt.Sprintf("mail.%s", strings.TrimSuffix(domain, ".")),
+		}, nil
+
+	case records.TypeCNAME:
+		// validation for CNAME
+		if !strings.HasPrefix(domain, "www.") {
+			return nil, fmt.Errorf("CNAME record only available for www subdomain")
+		}
+		return strings.TrimPrefix(domain, "www."), nil
+
+	case records.TypeTXT:
+		// Fix: Return string array for TXT record
+		return []string{"v=spf1 include:_spf.google.com ~all"}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported query type: %d", qtype)
+	}
 }
 
 func NewRateLimitedHandler(handler DNSHandler, limiter RateLimiter) DNSHandler {

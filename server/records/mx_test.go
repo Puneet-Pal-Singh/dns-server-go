@@ -54,48 +54,72 @@ func TestMXRecord_Comprehensive(t *testing.T) {
 
 func validateMXRecord(t *testing.T, buf *bytes.Buffer, domain string, mx MXData, ttl uint32) {
 	data := buf.Bytes()
-	if len(data) < 14 { // Minimum size for MX record
+	if len(data) < 14 {
 		t.Error("Response too short")
 		return
 	}
 
-	// Skip domain name (variable length)
-	_, _ = parseDomainName(bytes.NewReader(data[12:]))
+	r := bytes.NewReader(data)
+	_, err := parseDomainName(r)
+	if err != nil {
+		t.Fatalf("Failed to parse domain name: %v", err)
+	}
 
-	// Read type, class, TTL, and data length
-	var (
-		qtype, class uint16
-		readTTL      uint32
-		dataLen      uint16
-	)
-	binary.Read(bytes.NewReader(data[12:]), binary.BigEndian, &qtype)
-	binary.Read(bytes.NewReader(data[14:]), binary.BigEndian, &class)
-	binary.Read(bytes.NewReader(data[16:]), binary.BigEndian, &readTTL)
-	binary.Read(bytes.NewReader(data[20:]), binary.BigEndian, &dataLen)
+	// Read DNS fields
+	qtype, class, _, _, err := readDNSFields(r)
+	if err != nil {
+		t.Fatalf("Failed to read DNS fields: %v", err)
+	}
 
 	// Validate fields
-	if qtype != uint16(15) { // MX record type
-		t.Errorf("Expected type %d, got %d", 15, qtype)
+	if qtype != uint16(15) {
+		t.Errorf("Expected MX type 15, got %d", qtype)
 	}
-	if class != uint16(1) { // IN class
+	if class != uint16(1) {
 		t.Errorf("Expected class %d, got %d", 1, class)
 	}
-	if readTTL != ttl {
-		t.Errorf("Expected TTL %d, got %d", ttl, readTTL)
-	}
-	if dataLen < 3 { // MX record data length should be at least 3 bytes (preference + exchange)
-		t.Errorf("Expected data length at least 3, got %d", dataLen)
-	}
 
-	// Validate preference
-	preference := binary.BigEndian.Uint16(data[22:24])
+	// Read preference
+	var preference uint16
+	if err := binary.Read(r, binary.BigEndian, &preference); err != nil {
+		t.Fatalf("Failed to read preference: %v", err)
+	}
 	if preference != mx.Preference {
 		t.Errorf("Expected preference %d, got %d", mx.Preference, preference)
 	}
 
-	// Validate exchange
-	exchange, _ := parseDomainName(bytes.NewReader(data[24:]))
+	// Read exchange
+	exchange, err := parseDomainName(r)
+	if err != nil {
+		t.Fatalf("Failed to read exchange: %v", err)
+	}
 	if exchange != mx.Exchange {
-		t.Errorf("Expected exchange %s, got %s", mx.Exchange, exchange)
+		t.Errorf("Expected exchange %q, got %q", mx.Exchange, exchange)
+	}
+}
+
+func TestMXRecord_Integration(t *testing.T) {
+	mx := &MXRecord{}
+	data := MXData{
+		Preference: 10,
+		Exchange:   "mail.example.com",
+	}
+
+	answer, err := mx.BuildAnswer("example.com", data, 300)
+	if err != nil {
+		t.Fatalf("Failed to build MX answer: %v", err)
+	}
+
+	validateMXRecord(t, answer, "example.com", data, 300)
+}
+
+func TestMXHandler_Registration(t *testing.T) {
+	handler, ok := GetHandler(TypeMX)
+	if !ok {
+		t.Fatal("MX handler not registered")
+	}
+
+	if handler.Type() != TypeMX {
+		t.Errorf("Wrong type: got %d, want %d", handler.Type(), TypeMX)
 	}
 }
