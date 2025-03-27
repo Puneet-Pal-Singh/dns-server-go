@@ -96,7 +96,7 @@ func resolveDomain(ctx context.Context, handler DNSHandler, domain string, qtype
 		return nil, nil, fmt.Errorf("invalid data for type %d: %v", qtype, err)
 	}
 
-	// Improved Debug logging format 
+	// Improved Debug logging format
 	switch data := data.(type) {
 	case records.MXData:
 		log.Printf("[%d] Resolved %s → MX {preference: %d, exchange: %s}",
@@ -116,6 +116,25 @@ func buildAndSendResponse(conn *net.UDPConn, addr *net.UDPAddr, txnID uint16, do
 	if err != nil {
 		return err
 	}
+
+	// Handle single or multiple answers generically
+	switch d := data.(type) {
+	case []interface{}:
+		for _, record := range d {
+			answer, err := handler.BuildAnswer(domain, record, handler.DefaultTTL())
+			if err != nil {
+				return err
+			}
+			response = append(response, answer.Bytes()...)
+		}
+	default:
+		answer, err := handler.BuildAnswer(domain, data, handler.DefaultTTL())
+		if err != nil {
+			return err
+		}
+		response = append(response, answer.Bytes()...)
+	}
+
 	_, err = conn.WriteToUDP(response, addr)
 	return err
 }

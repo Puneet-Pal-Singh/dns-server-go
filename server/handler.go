@@ -36,9 +36,19 @@ func NewDNSHandler(resolver *DNSResolver) DNSHandler {
 func (h *dnsHandler) HandleQuery(ctx context.Context, domain string, qtype uint16) (interface{}, error) {
 	// return h.resolver.ResolveDomain(domain, qtype)
 	switch qtype {
+	// IPv4
 	case records.TypeA:
 		return "192.0.2.1", nil
 
+	// IPv6
+	case records.TypeAAAA:
+		return "2001:db8:85a3::8a2e:370:7334", nil
+
+	// // Name Server
+	// case records.TypeNS:
+	// 	return "ns.example.com", nil
+
+	// Mail Exchange
 	case records.TypeMX:
 		// Ensure proper MX record format
 		if !strings.Contains(domain, ".") {
@@ -49,6 +59,7 @@ func (h *dnsHandler) HandleQuery(ctx context.Context, domain string, qtype uint1
 			Exchange:   fmt.Sprintf("mail.%s", strings.TrimSuffix(domain, ".")),
 		}, nil
 
+	// Canonical Name
 	case records.TypeCNAME:
 		// validation for CNAME
 		if !strings.HasPrefix(domain, "www.") {
@@ -56,9 +67,9 @@ func (h *dnsHandler) HandleQuery(ctx context.Context, domain string, qtype uint1
 		}
 		return strings.TrimPrefix(domain, "www."), nil
 
+	// Text Record
 	case records.TypeTXT:
-		// Fix: Return string array for TXT record
-		return []string{"v=spf1 include:_spf.google.com ~all"}, nil
+		return []string{"v=spf1...", "google-site-verification=..."}, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported query type: %d", qtype)
