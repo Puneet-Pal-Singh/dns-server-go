@@ -44,9 +44,9 @@ func (h *dnsHandler) HandleQuery(ctx context.Context, domain string, qtype uint1
 	case records.TypeAAAA:
 		return "2001:db8:85a3::8a2e:370:7334", nil
 
-	// // Name Server
-	// case records.TypeNS:
-	// 	return "ns.example.com", nil
+	// Name Server
+	case records.TypeNS:
+		return "ns1.example.com", nil // Replace with actual nameservers
 
 	// Mail Exchange
 	case records.TypeMX:

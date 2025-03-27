@@ -19,6 +19,7 @@ const (
 	TypeMX     = 15  // MX record type
 	TypeTXT    = 16  // TXT record type
 	TypeCNAME  = 5   // CNAME record type
+	TypeNS     = 2   // NS record type
 	DefaultTTL = 300 // Default TTL value
 )
 
@@ -48,10 +49,11 @@ func init() {
 	RegisterHandler(&MXRecord{})
 	RegisterHandler(&TXTRecord{})
 	RegisterHandler(&CNAMERecord{})
+	RegisterHandler(&NSRecord{})
 
 	// Verify registration
-	log.Printf("Registered handlers for types: A(%d), AAAA(%d), MX(%d), TXT(%d), CNAME(%d)",
-		TypeA, TypeAAAA, TypeMX, TypeTXT, TypeCNAME)
+	log.Printf("Registered handlers for types: A(%d), AAAA(%d), NS(%d), MX(%d), TXT(%d), CNAME(%d)",
+		TypeA, TypeAAAA, TypeNS, TypeMX, TypeTXT, TypeCNAME)
 }
 
 // Add verification method
@@ -330,7 +332,7 @@ func (b *BaseHandler) ValidateRecordType(data interface{}, expectedType string) 
 // Add helper method to check if a type is supported
 func IsSupportedType(qtype uint16) bool {
 	switch qtype {
-	case TypeA, TypeAAAA, TypeMX, TypeTXT, TypeCNAME:
+	case TypeA, TypeAAAA, TypeMX, TypeTXT, TypeCNAME, TypeNS:
 		return true
 	default:
 		return false
