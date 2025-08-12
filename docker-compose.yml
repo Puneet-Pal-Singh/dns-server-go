@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  dns-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5354:5354/udp"
+    environment:
+      - UPSTREAM_DNS=8.8.8.8:53
+      - RATE_LIMIT_CAPACITY=100 # Maximum number of requests allowed in the bucket
+      - RATE_LIMIT_REFILL=1 # Number of requests to refill per second
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+    restart: unless-stopped
+    # For debugging purposes
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

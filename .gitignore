@@ -3,3 +3,5 @@
 
 # Ignore binaries
 dns-server-go
+/bin/
+dns-server
