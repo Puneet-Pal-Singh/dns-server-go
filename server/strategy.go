@@ -1,3 +1,4 @@
+// server/strategy.go
 package server
 
 import (

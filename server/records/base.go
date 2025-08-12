@@ -1,3 +1,4 @@
+// server/records/base.go
 package records
 
 import (

@@ -1,4 +1,4 @@
-// server/message.go
+// server/message_parser.go
 package server
 
 import (

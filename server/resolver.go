@@ -1,3 +1,4 @@
+// server/resolver.go
 package server
 
 import (
