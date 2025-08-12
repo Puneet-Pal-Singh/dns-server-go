@@ -1,0 +1,25 @@
+---
+description: Go coding standards and conventions
+globs: "**/*.go"
+---
+
+### Go Code Rules
+- Prefer small, single-purpose functions with early returns.
+- Use explicit error handling; wrap with context where useful.
+- Avoid interface{} in public APIs; use concrete types and interfaces at boundaries.
+- Use dependency injection for resolvers, rate limiters, and transports.
+- Keep concurrency safe: guard shared maps with mutexes; avoid races.
+- Respect allocations; avoid unnecessary copies of large slices/byte buffers.
+- Follow naming: exported APIs with clear docstrings; avoid abbreviations.
+
+### Testing
+- Follow Arrange-Act-Assert.
+- Cover happy path, validation errors, and edge cases.
+- For time-dependent logic (rate limiter), use small buffers and explicit time adjustments.
+ - Add E2E-style tests for request→response byte validation where feasible.
+
+### Linting & Style
+- Match existing formatting; do not reformat unrelated code.
+- Add comments only where non-trivial; explain why, not how.
+ - Prefer errors.New / fmt.Errorf with %w for wrapping.
+

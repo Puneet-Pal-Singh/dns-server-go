@@ -1,0 +1,34 @@
+---
+description: DNS protocol and project-specific rules
+globs: "server/**/*.go"
+---
+
+### DNS Protocol Rules
+- Parser must support label lengths, total length <= 255, and compression pointers with loop detection.
+- Response header fields must be correct: transaction id, flags, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT.
+- Record wire formats must adhere to RFCs (A, AAAA, CNAME, MX, TXT, NS).
+- Respect TTLs; clamp to reasonable bounds when missing.
+- Prefer name compression in responses when safe; ensure offsets are valid.
+
+### Response Construction
+- Always set `QDCOUNT` to 1 for single-question queries; compute `ANCOUNT` from the actual number of answers written.
+- Do not duplicate answers: avoid building an answer twice (ensure a single authoritative source of truth for answers).
+- Use `encoding/binary` BigEndian for all multi-byte fields; avoid manual slicing for integers.
+- Validate `QCLASS = IN`; for unsupported classes, respond with NOTIMP.
+- Map resolver errors to appropriate RCODEs: NOTIMP, NXDOMAIN, REFUSED, SERVFAIL.
+- If upstream returns multiple addresses, include multiple answers and update `ANCOUNT` accordingly.
+
+### Transport (UDP/TCP)
+- Keep UDP responses <= 512 bytes for classic DNS. If truncation is needed, set the TC bit and avoid splitting across packets.
+- Plan TCP fallback for truncated responses; do not exceed UDP size limits.
+
+### Resolver Rules
+- Use upstream `net.Resolver` for forwarding with custom dialer.
+- Support A and AAAA now; plan to extend MX/TXT/CNAME/NS using upstream data, not fabricated values.
+- Return appropriate errors mapped to DNS RCODEs (NOTIMP, NXDOMAIN, REFUSED, SERVFAIL).
+- Make strategies extendable without modifying core.
+
+### Middleware
+- Enforce per-IP token-bucket rate limiting; ensure thread safety.
+- Log rate-limit denials with client IP and domain.
+

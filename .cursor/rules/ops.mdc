@@ -1,0 +1,17 @@
+---
+description: Ops and deployment rules
+globs: "Dockerfile", "docker-compose.yml"
+---
+
+### Containerization
+- Use multi-stage builds; final image must be distroless, non-root.
+- Expose only UDP 5354; document protocol.
+- Configure envs: `UPSTREAM_DNS`, `RATE_LIMIT_CAPACITY`, `RATE_LIMIT_REFILL`.
+
+### Compose
+- Limit memory; restart unless-stopped.
+- Configure logging rotation.
+
+### Next Steps
+- Add health/readiness checks and K8s manifests.
+

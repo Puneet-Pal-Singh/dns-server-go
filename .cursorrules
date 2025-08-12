@@ -1,0 +1,60 @@
+Must follow guidelines
+
+### **Cursor Coding Principles** 🚀  
+
+These principles ensure **idiomatic, maintainable, and scalable** Go code while **minimizing redundancy and complexity**.  
+
+---  
+
+## **1️⃣ General Rules**  
+- **Think step-by-step before coding** – Plan structure and logic first to avoid rewrites.  
+- **Follow SOLID principles** – Prioritize **Single Responsibility, Open-Closed, and Dependency Injection**.  
+- **Code must be idiomatic Go** – Follow Go conventions, avoid unnecessary abstractions.  
+- **DRY (Don't Repeat Yourself)** – Extract reusable logic into helper functions or shared components.  
+- **KISS (Keep It Simple, Stupid)** – Avoid over-engineering and unnecessary complexity.  
+- **YAGNI (You Ain’t Gonna Need It)** – Don’t add unused abstractions or premature optimizations.  
+- **Every function should have a single responsibility** – Small, modular functions make debugging and testing easier.  
+- **Avoid deep nesting** – Use early returns and keep logic flat for better readability.  
+- **Minimize changes to core logic** – Future features should integrate smoothly without modifying existing foundational files.  
+- **Code should be self-documenting** – Use meaningful variable names and minimal but clear comments.  
+
+---  
+
+## **2️⃣ Backend / Go-Specific Rules**  
+- **Use Go’s concurrency correctly** – Avoid race conditions, handle Goroutines safely.  
+- **Memory efficiency matters** – Optimize struct layouts and avoid excessive allocations.  
+- **Use Dependency Injection** – Pass dependencies instead of hardcoding them.  
+- **Use interfaces for abstraction**, not unnecessary struct inheritance.  
+- **Leverage Go’s standard library first** – Only use third-party libraries when necessary.  
+- **Error handling must be clean** – No silent failures; always log critical errors.  
+- **Follow Go idioms for structuring projects** – Use `pkg`, `cmd`, and `internal` wisely.  
+- **Explain complex logic briefly** – Use short, meaningful comments for non-trivial implementations.  
+- **No TODOs in critical code** – If something is unfinished, document it properly.  
+- **Testing mindset** – Ensure components are testable and avoid fragile dependencies.  
+
+---  
+
+## **3️⃣ Scalability & Maintainability**  
+- **Open-Closed Principle** – New features should be **added without modifying existing logic**.  
+- **High Cohesion, Loose Coupling** – Keep related logic together while minimizing dependencies.  
+- **Separation of Concerns** – Different modules should handle distinct concerns.  
+- **Logs and monitoring** – Every critical function should have structured logging.  
+- **Implement proper error handling** – Use structured errors and avoid `panic`.  
+- **Input validation matters** – Validate inputs, especially in backend services.  
+- **No unnecessary global state** – Use explicit dependency injection where possible.  
+- **Minimize external dependencies** – Stick to built-in Go features unless necessary.  
+- **Write scalable functions** – Avoid hardcoded limits; allow for future flexibility.  
+- **Avoid premature optimization** – Write clean, correct code first, optimize later.  
+
+---  
+
+Project rule for our DNS server
+- Take inspiration from - https://github.dev/miekg/dns 
+- This repo contains many things to learn from.
+
+---
+<!-- 
+This ensures **high-quality, maintainable, and scalable** Go code while **keeping it idiomatic and efficient**. ✅   -->
+
+
+<!-- Would you like any refinements or additions? 🚀 -->

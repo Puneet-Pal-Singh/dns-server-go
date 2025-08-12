@@ -1,0 +1,39 @@
+---
+description: Global rules for dns-server-go project
+globs: "**/*"
+---
+
+Must follow guidelines
+
+### Project-wide Principles
+- Think step-by-step before coding; plan structure first.
+- Follow SOLID, especially Single Responsibility and Open-Closed.
+- Keep code idiomatic Go; avoid unnecessary abstractions.
+- DRY and KISS; prefer small, focused functions with early returns.
+- Avoid deep nesting; favor guard clauses.
+- Minimize external dependencies; prefer standard library.
+- No unnecessary global state; use explicit dependency injection.
+- Clear error handling; no silent failures, avoid panic in core paths.
+- Use meaningful names; code should be self-documenting.
+
+### Architecture
+- Separation of concerns: transport, parsing, resolution, records, middleware.
+- High cohesion, loose coupling between `server` subpackages.
+- Open-Closed: add new record types or strategies without modifying core.
+
+### Logging & Observability
+- Use structured logging for critical paths (request id, client ip, domain, qtype, rcode, latency).
+- Add metrics hooks for requests, errors, rate-limit denials, and latency (future).
+
+### Security & Ops
+- Run containers as non-root; use distroless base.
+- Expose only required UDP port; be explicit about protocols.
+- Validate and sanitize inputs; enforce reasonable limits.
+
+### Documentation
+- Keep `docs/` up-to-date: tasks, rules, high-level implementation.
+- Document non-trivial logic with short comments explaining "why".
+
+### References
+- Take inspiration from `miekg/dns` (`https://github.dev/miekg/dns`).
+

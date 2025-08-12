@@ -1,0 +1,14 @@
+---
+description: Testing strategy and expectations
+globs: "**/*_test.go"
+---
+
+### Unit Testing
+- Cover record handlers (A, AAAA, CNAME, MX, TXT, NS): validation and wire-format outputs.
+- Cover message parser including compression, invalid inputs, truncation.
+- Cover rate limiter: capacity, refill, multi-IP, cleanup, concurrency.
+
+### Integration/E2E (future)
+- Query-to-response byte validation for each record type.
+- Resolver tests for upstream lookups including TTL propagation.
+
