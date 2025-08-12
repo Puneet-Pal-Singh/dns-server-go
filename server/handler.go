@@ -1,3 +1,4 @@
+// server/handler.go
 package server
 
 import (
@@ -6,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -35,45 +35,66 @@ func NewDNSHandler(resolver *DNSResolver) DNSHandler {
 
 func (h *dnsHandler) HandleQuery(ctx context.Context, domain string, qtype uint16) (interface{}, error) {
 	// return h.resolver.ResolveDomain(domain, qtype)
-	switch qtype {
-	// IPv4
-	case records.TypeA:
-		return "192.0.2.1", nil
+	// switch qtype {
+	// // IPv4
+	// case records.TypeA:
+	// 	return "192.0.2.1", nil
 
-	// IPv6
-	case records.TypeAAAA:
-		return "2001:db8:85a3::8a2e:370:7334", nil
+	// // IPv6
+	// case records.TypeAAAA:
+	// 	return "2001:db8:85a3::8a2e:370:7334", nil
 
-	// Name Server
-	case records.TypeNS:
-		return "ns1.example.com", nil // Replace with actual nameservers
+	// // Name Server
+	// case records.TypeNS:
+	// 	return "ns1.example.com", nil // Replace with actual nameservers
 
-	// Mail Exchange
-	case records.TypeMX:
-		// Ensure proper MX record format
-		if !strings.Contains(domain, ".") {
-			return nil, fmt.Errorf("invalid domain for MX record: %s", domain)
-		}
-		return records.MXData{
-			Preference: 10,
-			Exchange:   fmt.Sprintf("mail.%s", strings.TrimSuffix(domain, ".")),
-		}, nil
+	// // Mail Exchange
+	// case records.TypeMX:
+	// 	// Ensure proper MX record format
+	// 	if !strings.Contains(domain, ".") {
+	// 		return nil, fmt.Errorf("invalid domain for MX record: %s", domain)
+	// 	}
+	// 	return records.MXData{
+	// 		Preference: 10,
+	// 		Exchange:   fmt.Sprintf("mail.%s", strings.TrimSuffix(domain, ".")),
+	// 	}, nil
 
-	// Canonical Name
-	case records.TypeCNAME:
-		// validation for CNAME
-		if !strings.HasPrefix(domain, "www.") {
-			return nil, fmt.Errorf("CNAME record only available for www subdomain")
-		}
-		return strings.TrimPrefix(domain, "www."), nil
+	// // Canonical Name
+	// case records.TypeCNAME:
+	// 	// validation for CNAME
+	// 	if !strings.HasPrefix(domain, "www.") {
+	// 		return nil, fmt.Errorf("CNAME record only available for www subdomain")
+	// 	}
+	// 	return strings.TrimPrefix(domain, "www."), nil
 
-	// Text Record
-	case records.TypeTXT:
-		return []string{"v=spf1...", "google-site-verification=..."}, nil
+	// // Text Record
+	// case records.TypeTXT:
+	// 	return []string{"v=spf1...", "google-site-verification=..."}, nil
 
-	default:
-		return nil, fmt.Errorf("unsupported query type: %d", qtype)
-	}
+	// default:
+	// 	return nil, fmt.Errorf("unsupported query type: %d", qtype)
+	// }
+
+	log.Printf("Resolving domain %s with query type %d", domain, qtype)
+    
+    // Validate query type
+    if !records.IsSupportedType(qtype) {
+        return nil, fmt.Errorf("unsupported query type: %d", qtype)
+    }
+
+    // Use the resolver to get the actual response
+    result, err := h.resolver.Resolve(ctx, ResolutionContext{
+        Domain: domain,
+        QType:  qtype,
+    })
+    
+    if err != nil {
+        log.Printf("Resolution error for %s: %v", domain, err)
+        return nil, err
+    }
+
+    log.Printf("[%d] Resolved %s → %v", qtype, domain, result)
+    return result, nil
 }
 
 func NewRateLimitedHandler(handler DNSHandler, limiter RateLimiter) DNSHandler {
